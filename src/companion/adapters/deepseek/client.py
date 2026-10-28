@@ -72,6 +72,7 @@ class DeepSeekClient:
         payload: dict[str, Any] = {
             "model": self._settings.model,
             "messages": messages,
+            "max_tokens": self._settings.max_tokens,
             "thinking": {"type": "enabled" if self._settings.enable_thinking else "disabled"},
         }
         try:

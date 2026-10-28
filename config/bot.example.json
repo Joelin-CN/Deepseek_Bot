@@ -9,17 +9,26 @@
     "reconnect_max_delay": 30
   },
   "bot": {
+    "owner_qq": 0,
     "allowed_private_senders": [0],
     "reply_mode": "fixed",
     "fixed_reply_text": "收到，QQ 链路已连通。",
     "dedup_cache_size": 2048,
+    "max_handlers": 4,
+    "event_queue_size": 1000,
+    "data_dir": null,
     "log_level": "INFO"
   },
   "deepseek": {
     "base_url": "https://api.deepseek.com",
     "model": "deepseek-flash",
     "timeout": 60,
+    "max_tokens": 1024,
     "max_history_messages": 20,
+    "max_history_tokens": 2000,
+    "max_reply_chars": 3000,
+    "model_concurrency": 4,
+    "memory_context_items": 8,
     "enable_thinking": false,
     "system_prompt": "你是一个友好的 QQ 私聊机器人助手，用简洁的中文回答。"
   }

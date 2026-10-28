@@ -68,3 +68,29 @@ def test_deepseek_mode_requires_api_key(tmp_path, monkeypatch):
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
     settings = load_settings(write_config(tmp_path, payload))
     assert settings.bot.reply_mode == "deepseek"
+
+
+def test_data_dir_defaults_to_config_sibling(tmp_path, monkeypatch):
+    monkeypatch.delenv("COMPANION_DATA_DIR", raising=False)
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    settings = load_settings(write_config(config_dir, MINIMAL_VALID))
+    assert settings.data_dir_resolved == (tmp_path / "data").resolve()
+
+
+def test_data_dir_env_override(tmp_path, monkeypatch):
+    monkeypatch.setenv("COMPANION_DATA_DIR", str(tmp_path / "custom-data"))
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    settings = load_settings(write_config(config_dir, MINIMAL_VALID))
+    assert settings.data_dir_resolved == (tmp_path / "custom-data").resolve()
+
+
+def test_data_dir_relative_field_resolved_from_config_location(tmp_path, monkeypatch):
+    monkeypatch.delenv("COMPANION_DATA_DIR", raising=False)
+    payload = json.loads(json.dumps(MINIMAL_VALID))
+    payload["bot"]["data_dir"] = "state"
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    settings = load_settings(write_config(config_dir, payload))
+    assert settings.data_dir_resolved == (tmp_path / "state").resolve()

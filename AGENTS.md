@@ -2,7 +2,7 @@
 
 ## 当前阶段与授权
 
-用户已授权实现阶段，且 M1（QQ 私聊固定应答）与 M2（DeepSeek 实际应答）已完成并通过真实验收：应用代码（OneBot 正向 WS 客户端、筛选与去重、固定应答、DeepSeek 有界上下文应答）、应用依赖（`pyproject.toml`）、SnowLuma v2.2.1 安装（`E:\Softwares\SnowLuma`，仓库外）、机器人 QQ 账号接入与环境验收均已完成。插件系统、AstrBot 兼容层、长期记忆服务、ego-lite 浏览器接入与管理面板仍未实现；后续按用户的新指令推进。
+用户已授权 M3–M9 续做阶段（交接任务书：`docs/agent-handoff-post-m2.md`）。M1（QQ 私聊固定应答）、M2（DeepSeek 实际应答）与 M3（统一会话内核 + 基础长期记忆）已完成并验收：会话/权限/持久化内核、消息状态机、显式记忆命令、动作结果三分与重连重验证均已落地，SnowLuma 位于 `E:\Softwares\SnowLuma`（仓库外）。插件系统（M4）、工具循环与 ego-lite（M5）、群聊（M6）、AstrBot 兼容层（M7）、自主活动（M8）、长期运行管理（M9）未实现；群聊真实联调、入群与自主活动启用需用户逐项确认。默认不提交、不推送。
 
 修改前阅读 `README.md`、`docs/architecture.md`、`docs/decisions/0001-project-baseline.md`、`docs/development-environment.md` 和 `docs/environment-audit.md`。涉及插件或记忆时，再阅读对应专题文档。
 

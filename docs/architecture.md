@@ -37,6 +37,8 @@ Python 统一使用 Conda 环境 `Deepseek_bot`，版本基线为 3.12.x。每�
 | `management` | 状态、配置和管理操作接口 | 前端形式尚未确定 |
 | `telemetry` | 日志、错误与用量 | 默认避免记录密钥和完整私人内容 |
 
+已实现（M1–M3）：`core/lifecycle`（runner 与 worker 池）、`core/events`（InboundMessage + SessionKey）、`core/pipeline`（筛选链、记忆命令、固定应答）、`core/agent`（DeepSeek 有界上下文应答）、`core/sessions`（会话管理/去重/消息与用量存储）、`core/permissions`（角色/能力/运行上下文）、`adapters/onebot`、`adapters/deepseek`、`memory`（显式记忆服务）、`persistence`（SQLite + 迁移 v1/v2）。其余目录仍为规划占位。
+
 ## 规划中的主流程
 
 ```text

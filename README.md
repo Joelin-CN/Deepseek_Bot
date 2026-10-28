@@ -4,9 +4,9 @@
 
 ## 当前阶段
 
-M1（QQ 私聊固定应答）与 M2（DeepSeek 实际应答）已实现并通过真实验收：授权发送者用日常 QQ 给机器人（SnowLuma 接入的独立 QQ 账号）发私聊，可收到回复；当前运行于 deepseek 模式。环境为 Conda `Deepseek_bot`（Python 3.12.16），应用依赖见 `pyproject.toml`。启动、停止与故障处理见 [运行手册](docs/runbook.md)。
+M1（QQ 私聊固定应答）、M2（DeepSeek 实际应答）与 M3（统一会话内核 + 基础长期记忆）已实现并验收。当前运行于 deepseek 模式：授权发送者私聊可获得模型回复，并可使用显式记忆命令（记住/查看/搜索/修改/忘记），记忆跨重启有效且按会话隔离。消息状态、模型用量与长期记忆持久化在 `data/bot.db`（SQLite）。启动、停止、备份与故障处理见 [运行手册](docs/runbook.md)。
 
-尚未开始：插件系统、AstrBot 兼容层、长期记忆服务、ego-lite 浏览器接入、管理面板。
+尚未开始：插件系统（M4）、统一工具循环与 ego-lite 浏览器（M5）、群聊应答（M6）、AstrBot 兼容层（M7）、自主活动（M8）、长期运行管理（M9）。
 
 源码包名暂用 `companion`，与规划阶段保持一致；产品命名与最终发布包名可以后续确定。
 
@@ -39,23 +39,23 @@ src/
   companion/
     api/                    原生插件使用的公共接口
     core/
-      lifecycle/            启动、停止、资源清理（已实现：runner）
+      lifecycle/            启动、停止、资源清理（已实现：runner + worker 池）
       events/               内部事件与消息格式（已实现：InboundMessage）
-      pipeline/             消息处理阶段及挂钩（已实现：筛选链、固定应答、Responder 协议）
-      agent/                模型与工具执行循环（已实现：DeepSeek 有界上下文应答器）
-      sessions/             会话、上下文、并发控制（已实现：去重缓存、按用户锁）
+      pipeline/             消息处理阶段及挂钩（已实现：筛选链、记忆命令、固定应答、Responder 协议）
+      agent/                模型与工具执行循环（已实现：DeepSeek 有界上下文应答）
+      sessions/             会话、上下文、并发控制（已实现：SessionKey、去重、锁、消息/用量存储）
       tools/                工具登记与执行入口
-      permissions/          身份、能力与范围检查
+      permissions/          身份、能力与范围检查（已实现：角色/能力/运行上下文）
     adapters/
-      onebot/               SnowLuma 接入（已实现：正向 WS 客户端、事件解析、消息段）
+      onebot/               SnowLuma 接入（已实现：正向 WS 客户端、重连重验证、动作结果三分）
       deepseek/             模型接入（已实现：chat completions 适配器）
       ego/                  ego-lite 接入
     plugin_system/          插件加载、配置与生命周期
     compat/astrbot/         AstrBot 插件接口与行为转换
-    memory/                 记忆服务、范围与检索
-    persistence/            数据库、存储实现与迁移
+    memory/                 记忆服务、范围与检索（已实现：显式记忆、范围隔离、修订链）
+    persistence/            数据库、存储实现与迁移（已实现：SQLite + 迁移 v1/v2）
     management/             管理接口
-    config/                 配置加载与校验（已实现：settings）
+    config/                 配置加载与校验（已实现：settings + 数据目录解析）
     telemetry/              日志、错误与用量
   astrbot/                  限定范围的兼容导入入口
 plugins/                    随项目维护的内置插件
@@ -84,6 +84,7 @@ pyproject.toml              应用包定义与依赖清单
 - [Python 与 Conda 环境约定](docs/development-environment.md)
 - [环境调查与验证记录](docs/environment-audit.md)
 - [可复制的 QQ 应答交接提示词](docs/agent-handoff.md)
+- [M3–M9 后续能力交接提示词](docs/agent-handoff-post-m2.md)
 - [上游来源与代码复用记录](docs/upstream-sources.md)
 - [当前运行状态与后续检查](docs/runbook.md)
 
