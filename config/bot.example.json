@@ -1,0 +1,26 @@
+{
+  "onebot": {
+    "ws_url": "ws://127.0.0.1:3001/",
+    "access_token": "填 SnowLuma config/onebot_<机器人QQ号>.json 中 networks.wsServers[0].accessToken",
+    "self_id": 0,
+    "connect_timeout": 10,
+    "action_timeout": 15,
+    "reconnect_min_delay": 1,
+    "reconnect_max_delay": 30
+  },
+  "bot": {
+    "allowed_private_senders": [0],
+    "reply_mode": "fixed",
+    "fixed_reply_text": "收到，QQ 链路已连通。",
+    "dedup_cache_size": 2048,
+    "log_level": "INFO"
+  },
+  "deepseek": {
+    "base_url": "https://api.deepseek.com",
+    "model": "deepseek-flash",
+    "timeout": 60,
+    "max_history_messages": 20,
+    "enable_thinking": false,
+    "system_prompt": "你是一个友好的 QQ 私聊机器人助手，用简洁的中文回答。"
+  }
+}

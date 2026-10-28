@@ -13,6 +13,12 @@ downloads/
 screenshots/
 backups/
 
+# Root download and temporary workspaces: keep only directory documentation
+/download/*
+!/download/README.md
+/temp/*
+!/temp/README.md
+
 # Python
 .venv/
 venv/
@@ -35,6 +41,7 @@ coverage/
 # Editor and operating-system files
 .idea/
 .vscode/
+.zcode/
 .DS_Store
 Thumbs.db
 Desktop.ini

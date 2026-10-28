@@ -2,9 +2,18 @@
 
 ## 当前阶段与授权
 
-当前用户授权的是创建仓库骨架，不包含具体实现代码、依赖安装或外部服务接入。后续按用户的新指令推进；这条阶段记录不构成永久禁止实现。
+用户已授权实现阶段，且 M1（QQ 私聊固定应答）与 M2（DeepSeek 实际应答）已完成并通过真实验收：应用代码（OneBot 正向 WS 客户端、筛选与去重、固定应答、DeepSeek 有界上下文应答）、应用依赖（`pyproject.toml`）、SnowLuma v2.2.1 安装（`E:\Softwares\SnowLuma`，仓库外）、机器人 QQ 账号接入与环境验收均已完成。插件系统、AstrBot 兼容层、长期记忆服务、ego-lite 浏览器接入与管理面板仍未实现；后续按用户的新指令推进。
 
-修改前阅读 `README.md`、`docs/architecture.md` 和 `docs/decisions/0001-project-baseline.md`。涉及插件或记忆时，再阅读对应专题文档。
+修改前阅读 `README.md`、`docs/architecture.md`、`docs/decisions/0001-project-baseline.md`、`docs/development-environment.md` 和 `docs/environment-audit.md`。涉及插件或记忆时，再阅读对应专题文档。
+
+## 环境前置检查
+
+- 严格按“调研路线要求 → 盘点本机 → 校验兼容与缺口 → 配置环境 → 执行环境验收 → 开始对应里程碑实现／联调”的顺序推进。
+- Python 环境固定为 Conda `Deepseek_bot`，版本为 3.12.x；本机路径和实际版本见环境文档。
+- 安装、测试和运行使用此环境。优先通过完整 Conda 路径执行 `conda run --no-capture-output -n Deepseek_bot`，不要假定工具 shell 保留激活状态。
+- 不在 base、其他项目环境或全局 Python 中安装本项目依赖，不另建 `.venv`。如使用 uv，显式指向本环境解释器。
+- 先验证实际解释器、pip 归属和依赖一致性，再安装业务依赖。检查对应里程碑所需的外部组件版本、端口、账号与鉴权，不把 Python 可用等同于联调可用。
+- `docs/agent-handoff.md` 是供用户复制的交接模板；其中实现授权只有在用户实际发出该指令时生效。
 
 ## 已确认的项目边界
 
@@ -18,6 +27,7 @@
 ## 文件与数据
 
 - 不提交真实密钥、QQ 登录态、私人消息、数据库、日志或第三方下载内容。
+- 根目录 `download/` 和 `temp/` 存放下载产物与临时文件；只跟踪各自的 `README.md`，不把运行产物加入 Git。
 - `plugins/` 存放本项目维护的内置插件；运行时安装的外部插件放在独立数据目录。
 - 不把 SnowLuma、QQ、ego-lite 的程序或源码复制进仓库。
 - 复用第三方代码前核对来源与许可，并更新 `docs/upstream-sources.md`。

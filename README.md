@@ -4,13 +4,26 @@
 
 ## 当前阶段
 
-当前只完成目录、模块职责和设计文档，没有应用代码、依赖安装、数据库或可执行入口。现在不能启动机器人，也没有接入 QQ 或调用收费 API。
+M1（QQ 私聊固定应答）与 M2（DeepSeek 实际应答）已实现并通过真实验收：授权发送者用日常 QQ 给机器人（SnowLuma 接入的独立 QQ 账号）发私聊，可收到回复；当前运行于 deepseek 模式。环境为 Conda `Deepseek_bot`（Python 3.12.16），应用依赖见 `pyproject.toml`。启动、停止与故障处理见 [运行手册](docs/runbook.md)。
+
+尚未开始：插件系统、AstrBot 兼容层、长期记忆服务、ego-lite 浏览器接入、管理面板。
 
 源码包名暂用 `companion`，与规划阶段保持一致；产品命名与最终发布包名可以后续确定。
+
+## 快速开始
+
+```powershell
+Set-Location 'E:\Deepseek Bot'
+# 前提：SnowLuma 与机器人 QQ 实例已运行（见 docs/runbook.md「启动前检查」）
+powershell -ExecutionPolicy Bypass -File scripts\windows\start_bot.ps1 -Foreground
+```
+
+配置：复制 `config/bot.example.json` 为 `config/local.json` 填入本机值；`.env` 填 `DEEPSEEK_API_KEY`（两者均被 Git 忽略）。
 
 ## 已确定的方向
 
 - 在当前 Windows 电脑运行，尽量长期在线。
+- Python 固定使用 Conda 环境 `Deepseek_bot`，版本基线为 3.12.x；先通过对应阶段的环境检查，再进入实现与联调。
 - 使用用户提供的独立 QQ 账号，优先通过 SnowLuma 的 OneBot 接口接入。
 - 使用 DeepSeek API；月费用预算为 100–300 元，具体执行额度以后配置。
 - 网页任务使用本机 ego-lite，通过 `ego-browser` 接入。
@@ -26,35 +39,39 @@ src/
   companion/
     api/                    原生插件使用的公共接口
     core/
-      lifecycle/            启动、停止、资源清理
-      events/               内部事件与消息格式
-      pipeline/             消息处理阶段及挂钩
-      agent/                模型与工具执行循环
-      sessions/             会话、上下文、并发控制
+      lifecycle/            启动、停止、资源清理（已实现：runner）
+      events/               内部事件与消息格式（已实现：InboundMessage）
+      pipeline/             消息处理阶段及挂钩（已实现：筛选链、固定应答、Responder 协议）
+      agent/                模型与工具执行循环（已实现：DeepSeek 有界上下文应答器）
+      sessions/             会话、上下文、并发控制（已实现：去重缓存、按用户锁）
       tools/                工具登记与执行入口
       permissions/          身份、能力与范围检查
     adapters/
-      onebot/               SnowLuma 接入
-      deepseek/             模型接入
+      onebot/               SnowLuma 接入（已实现：正向 WS 客户端、事件解析、消息段）
+      deepseek/             模型接入（已实现：chat completions 适配器）
       ego/                  ego-lite 接入
     plugin_system/          插件加载、配置与生命周期
     compat/astrbot/         AstrBot 插件接口与行为转换
     memory/                 记忆服务、范围与检索
     persistence/            数据库、存储实现与迁移
     management/             管理接口
-    config/                 配置加载与校验
+    config/                 配置加载与校验（已实现：settings）
     telemetry/              日志、错误与用量
   astrbot/                  限定范围的兼容导入入口
 plugins/                    随项目维护的内置插件
 examples/plugins/           后续插件示例
 config/                     默认配置与示例的位置
-scripts/windows/            后续本机运行辅助脚本
+scripts/windows/            本机运行辅助脚本（start_bot.ps1 / stop_bot.ps1）
 ops/                        外部组件与运行维护约定
-tests/                      单元、契约、集成与插件兼容检查
+download/                   下载产物，只跟踪目录说明
+temp/                       临时中间文件，只跟踪目录说明
+tests/                      单元、契约、集成与插件兼容检查（unit 与 integration 已有实现）
 docs/                       架构、模块设计与决策记录
+environment.yml             Conda 基础环境定义
+pyproject.toml              应用包定义与依赖清单
 ```
 
-空目录使用 `.gitkeep` 保留。它们不是可导入的 Python 包，也不代表对应能力已经实现。
+未实现的目录仍用 `.gitkeep` 保留。它们不是可导入的 Python 包，也不代表对应能力已经实现。
 
 ## 文档入口
 
@@ -63,16 +80,22 @@ docs/                       架构、模块设计与决策记录
 - [插件系统与原生 API](docs/plugin-api.md)
 - [AstrBot 兼容范围](docs/compatibility.md)
 - [已确认的项目基线](docs/decisions/0001-project-baseline.md)
+- [Conda 环境与前置检查决策](docs/decisions/0002-conda-environment.md)
+- [Python 与 Conda 环境约定](docs/development-environment.md)
+- [环境调查与验证记录](docs/environment-audit.md)
+- [可复制的 QQ 应答交接提示词](docs/agent-handoff.md)
 - [上游来源与代码复用记录](docs/upstream-sources.md)
 - [当前运行状态与后续检查](docs/runbook.md)
 
 ## 数据与配置
 
-真实密钥、账号配置、聊天记录、数据库、第三方插件下载及浏览产物不进入 Git。实际运行数据目录后续由配置指定，放在源码目录之外。
+真实密钥、账号配置、聊天记录、数据库、第三方插件下载及浏览产物不进入 Git。长期运行状态与数据库目录后续由配置指定，放在源码目录之外。
 
-`.env.example` 只列出候选配置变量，不包含可用密钥，当前也没有配置加载实现。
+根目录另提供 [download/](download/README.md) 保存下载产物，[temp/](temp/README.md) 保存临时中间文件。两个目录只跟踪各自的 `README.md`，实际文件与任务子目录由 Git 忽略。需要长期保留的资料另行归档；当前没有下载逻辑或自动清理实现。
 
-`pyproject.toml`、`uv.lock`、Python 入口、数据库迁移和 Windows 脚本会在对应实现阶段添加，避免把占位清单误当成可用环境。
+`.env.example` 列出配置变量约定，不包含可用密钥；加载实现在 `src/companion/config/settings.py`（pydantic 校验，配置错误明确报告）。
+
+`environment.yml` 只定义 Python 3.12 与 pip；应用依赖由 `pyproject.toml` 定义并安装到同一 Conda 环境（见 [环境约定](docs/development-environment.md)）。后续依赖工具必须使用已有 Conda 环境，不能默认另建 `.venv`。
 
 ## 尚待讨论的事项
 

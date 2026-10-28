@@ -1,0 +1,4 @@
+name: Deepseek_bot
+dependencies:
+  - python=3.12
+  - pip

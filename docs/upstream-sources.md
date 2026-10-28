@@ -5,9 +5,13 @@
 | 项目 | 本项目中的用途 | 当前接入／复用状态 |
 | --- | --- | --- |
 | [AstrBot](https://github.com/AstrBotDevs/AstrBot) | 架构参考、插件兼容目标 | 文档与目录研究；没有复制源码 |
-| [SnowLuma](https://github.com/SnowLuma/SnowLuma) | 外部 QQ 接入端 | 规划通过 OneBot 连接；未安装或登录 |
+| [SnowLuma](https://github.com/SnowLuma/SnowLuma) | 外部 QQ 接入端 | **已安装 v2.2.1 完整版**（`E:\Softwares\SnowLuma`，仓库之外），经正向 WS OneBot v11 接入并完成真实验收；未复制其源码进仓库 |
 | [ego-lite](https://github.com/citrolabs/ego-lite) | 外部浏览器能力 | 规划通过本机 `ego-browser` 接入；未连接到本项目 |
-| [DeepSeek API](https://api-docs.deepseek.com/) | 外部模型服务 | 未在本项目配置或调用 |
+| [DeepSeek API](https://api-docs.deepseek.com/) | 外部模型服务 | **已配置并实际调用**（httpx 直连官方 API，无 SDK）；未复制代码 |
+
+## SnowLuma 许可说明
+
+SnowLuma 采用 **SnowLuma Source-Available Non-Commercial License v1.0**（非 OSI 开源许可）：允许个人非商业自托管、私下修改；禁止商业用途（出售、付费托管/代搭、并入付费产品）；再分发与公开发布修改版受额外限制；原生组件（`native/*.node`）禁止逆向。本项目为本机个人自用，符合上述许可；不把其源码或发行包复制进仓库，也不在项目中再分发。
 
 ## AstrBot 许可说明
 

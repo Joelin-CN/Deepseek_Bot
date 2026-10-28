@@ -1,7 +1,8 @@
-# Windows 运行辅助脚本位置
+# Windows 运行辅助脚本
 
-这里将保存启动、停止、环境检查和备份等辅助脚本。当前没有脚本实现。
+- `start_bot.ps1`：用 Conda `Deepseek_bot` 环境启动机器人（`python -m companion`）。
+  - `-Foreground`：前台运行，Ctrl+C 优雅退出（推荐日常使用）。
+  - 默认后台运行，PID 记录在 `runtime\bot.pid`，日志写入 `logs\bot.log`。
+- `stop_bot.ps1`：只结束 `runtime\bot.pid` 记录的单个进程；PID 对应进程名不是 python 时拒绝执行。这是强制结束；优雅退出请用前台模式。
 
-后续只管理本项目创建的进程，不通过批量终止所有 QQ、浏览器或同名进程来停止机器人。
-
-所有路径从明确的项目配置或独立数据目录读取。文件操作使用原生 PowerShell 路径处理；递归删除或移动前验证最终绝对路径。
+脚本只管理本项目创建的进程，不批量终止 QQ、SnowLuma、浏览器或其他同名进程。SnowLuma 与机器人 QQ 实例需要另行保持运行（见 [ops](../../ops/README.md) 与 [runbook](../../docs/runbook.md)）。
