@@ -1,0 +1,40 @@
+# Local secrets and machine-specific settings
+.env
+.env.*
+!.env.example
+.local/
+config/local.*
+
+# Runtime data; tracked first-party plugins remain in plugins/
+data/
+runtime/
+logs/
+downloads/
+screenshots/
+backups/
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Optional frontend dependencies and generated output
+node_modules/
+coverage/
+
+# Editor and operating-system files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+Desktop.ini
