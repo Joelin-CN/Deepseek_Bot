@@ -148,10 +148,19 @@ counter 的 `heartbeat_interval` 只控制写本地日志的心跳（默认 60 �
 ```powershell
 Set-Location 'E:\Deepseek Bot'
 
-# 前台运行（推荐日常使用；Ctrl+C 优雅退出并记录清理日志）
+# 0) SnowLuma（电脑重启后需要；PID 记录在 runtime\snowluma.pid）
+#    WebUI 预设密码从 .env 的 SNOWLUMA_WEBUI_PASSWORD 读取，经
+#    SNOWLUMA_WEBUI_BOOTSTRAP_PASSWORD 播种——只在 webui.json 不存在时生效，
+#    播种后跨重启稳定。
+powershell -ExecutionPolicy Bypass -File scripts\windows\start_snowluma.ps1
+#    QQ 重启后仍需登录 WebUI（http://127.0.0.1:5099，密码=.env 的
+#    SNOWLUMA_WEBUI_PASSWORD），在「进程注入」页对机器人 QQ 实例
+#    （3666167977）点 Load；个人 QQ（844281600）不要注入。
+
+# 1) 机器人（前台运行推荐日常使用；Ctrl+C 优雅退出并记录清理日志）
 powershell -ExecutionPolicy Bypass -File scripts\windows\start_bot.ps1 -Foreground
 
-# 后台运行（PID 记录在 runtime\bot.pid）
+# 2) 后台运行（PID 记录在 runtime\bot.pid）
 powershell -ExecutionPolicy Bypass -File scripts\windows\start_bot.ps1
 
 # 停止后台实例（只结束 PID 文件记录的进程）

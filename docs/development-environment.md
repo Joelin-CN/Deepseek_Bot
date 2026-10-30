@@ -78,6 +78,8 @@ python -c "import sys; print(sys.executable)"
 | 运行 | pydantic / pydantic-settings（配置校验、.env） | 2.14.1 / 2.16.1 |
 | dev | pytest / pytest-asyncio | 9.2.0 / 1.4.1 |
 
+`.env` 另含 `SNOWLUMA_WEBUI_PASSWORD`（SnowLuma WebUI 预设密码，至少 8 字符，仅本地；由 `scripts\windows\start_snowluma.ps1` 经 `SNOWLUMA_WEBUI_BOOTSTRAP_PASSWORD` 播种，只在 `E:\Softwares\SnowLuma\config\webui.json` 不存在时生效，播种后跨重启稳定）。
+
 测试：`python -m pytest -q`（331 项全部通过；含替身 WS/模型/浏览器集成测试）。升级依赖后先跑全部测试再联调。
 
 ## 必须遵循的推进顺序
