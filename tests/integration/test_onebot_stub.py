@@ -181,6 +181,31 @@ async def make_db(tmp_path) -> Database:
     return await Database.open(tmp_path / "bot.db")
 
 
+async def wait_for_status(db: Database, platform_message_id: int, expected: str, timeout: float = 5.0) -> None:
+    """等待消息进入终态。必须在停止 runner 前调用：取消可能打断送达写库。"""
+    row = None
+    deadline = asyncio.get_running_loop().time() + timeout
+    while asyncio.get_running_loop().time() < deadline:
+        row = await db.fetchone(
+            "SELECT status FROM messages WHERE platform_message_id=?", (platform_message_id,)
+        )
+        if row and row[0] == expected:
+            return
+        await asyncio.sleep(0.02)
+    raise AssertionError(
+        f"等待消息 {platform_message_id} 状态 {expected} 超时，当前为 {row[0] if row else None}"
+    )
+
+
+async def wait_workers(runner: BotRunner, timeout: float = 5.0) -> None:
+    """等待身份验证完成、worker 池启动——验证前推送的事件会被客户端丢弃。"""
+    deadline = asyncio.get_running_loop().time() + timeout
+    while not getattr(runner, "_workers", None):
+        if asyncio.get_running_loop().time() > deadline:
+            raise AssertionError("等待 runner worker 池启动超时")
+        await asyncio.sleep(0.01)
+
+
 @contextlib.asynccontextmanager
 async def running_bot(settings: Settings, db: Database, responder=None):
     runner = BotRunner(settings, responder, database=db)
@@ -198,8 +223,9 @@ async def test_m1_fixed_reply_end_to_end(tmp_path):
     await stub.start()
     db = await make_db(tmp_path)
     try:
-        async with running_bot(make_settings(stub.port), db) as (_, task):
+        async with running_bot(make_settings(stub.port), db) as (runner, task):
             await stub.wait_for_action("get_login_info")
+            await wait_workers(runner)
 
             await stub.push_event(private_event(message_id=101))
             action = await stub.wait_for_action("send_private_msg")
@@ -232,8 +258,9 @@ async def test_reconnect_and_reply_after_server_drop(tmp_path):
     await stub.start()
     db = await make_db(tmp_path)
     try:
-        async with running_bot(make_settings(stub.port), db) as (_, task):
+        async with running_bot(make_settings(stub.port), db) as (runner, task):
             await stub.wait_for_action("get_login_info")
+            await wait_workers(runner)
 
             await stub.push_event(private_event(message_id=201))
             await stub.wait_for_action("send_private_msg")
@@ -247,6 +274,8 @@ async def test_reconnect_and_reply_after_server_drop(tmp_path):
             await stub.wait_for_action("send_private_msg", occurrence=2)
             assert len(stub.sent_messages) == 2
             assert not stub.handler_errors
+            for mid in (201, 202):
+                await wait_for_status(db, mid, "sent_ok")
 
         for mid, status in ((201, "sent_ok"), (202, "sent_ok")):
             row = await db.fetchone(
@@ -278,8 +307,9 @@ async def test_send_receipt_lost_marks_unknown_and_no_resend(tmp_path):
     await stub.start()
     db = await make_db(tmp_path)
     try:
-        async with running_bot(make_settings(stub.port), db) as (_, task):
+        async with running_bot(make_settings(stub.port), db) as (runner, task):
             await stub.wait_for_action("get_login_info")
+            await wait_workers(runner)
             await stub.push_event(private_event(message_id=401))
             await stub.wait_for_action("send_private_msg")
             # 服务端执行后立即断线；客户端应得到“结果未知”并等待重连
@@ -298,6 +328,8 @@ async def test_send_receipt_lost_marks_unknown_and_no_resend(tmp_path):
             await stub.push_event(private_event(message_id=402))
             await stub.wait_for_action("send_private_msg", occurrence=2)
             assert len(stub.sent_messages) == 2
+            await wait_for_status(db, 401, "send_unknown")
+            await wait_for_status(db, 402, "sent_ok")
 
         unknown = await db.fetchone(
             "SELECT status FROM messages WHERE platform_message_id=401"
@@ -307,6 +339,11 @@ async def test_send_receipt_lost_marks_unknown_and_no_resend(tmp_path):
         )
         assert unknown[0] == "send_unknown"
         assert ok[0] == "sent_ok"
+        # 回执未知的一轮不进入可恢复的对话历史
+        from companion.core.sessions.store import MessageStore
+
+        turns = await MessageStore(db).delivered_turns(f"qq/{SELF_ID}/private/{ALLOWED}", 10)
+        assert [t[0] for t in turns] == ["测试消息"]  # 只有 402 的一轮
     finally:
         await db.close()
         await stub.stop()
@@ -322,8 +359,9 @@ async def test_action_timeout_yields_unknown_and_recovers(tmp_path):
         update={"onebot": settings.onebot.model_copy(update={"action_timeout": 0.4})}
     )
     try:
-        async with running_bot(settings, db) as (_, task):
+        async with running_bot(settings, db) as (runner, task):
             await stub.wait_for_action("get_login_info")  # 登录回包不受 send 延迟影响
+            await wait_workers(runner)
             await stub.push_event(private_event(message_id=501))
             await stub.wait_for_action("send_private_msg")  # 动作已到达服务端
             # 等服务端把延迟的回包发完（替身按帧串行处理），再恢复正常速度
@@ -332,7 +370,8 @@ async def test_action_timeout_yields_unknown_and_recovers(tmp_path):
             stub.send_reply_delay = 0.0
             await stub.push_event(private_event(message_id=502))
             await stub.wait_for_action("send_private_msg", occurrence=2)
-            await asyncio.sleep(0.2)
+            await wait_for_status(db, 501, "send_unknown")
+            await wait_for_status(db, 502, "sent_ok")
 
         unknown = await db.fetchone(
             "SELECT status FROM messages WHERE platform_message_id=501"
@@ -356,7 +395,7 @@ async def test_worker_pool_bounds_concurrency(tmp_path):
             self.max_concurrent = 0
             self.handled = 0
 
-        async def respond(self, message):
+        async def respond(self, message, ctx):
             self.current += 1
             self.max_concurrent = max(self.max_concurrent, self.current)
             await asyncio.sleep(0.08)
@@ -370,8 +409,9 @@ async def test_worker_pool_bounds_concurrency(tmp_path):
     slow = SlowResponder()
     try:
         settings = make_settings(stub.port, max_handlers=2)
-        async with running_bot(settings, db, responder=slow) as (_, task):
+        async with running_bot(settings, db, responder=slow) as (runner, task):
             await stub.wait_for_action("get_login_info")
+            await wait_workers(runner)
             for i in range(8):
                 await stub.push_event(private_event(message_id=600 + i))
             await stub.wait_for_action("send_private_msg", occurrence=8, timeout=10)
@@ -431,8 +471,9 @@ async def test_memory_command_flow_end_to_end(tmp_path):
     await stub.start()
     db = await make_db(tmp_path)
     try:
-        async with running_bot(make_settings(stub.port), db) as (_, task):
+        async with running_bot(make_settings(stub.port), db) as (runner, task):
             await stub.wait_for_action("get_login_info")
+            await wait_workers(runner)
 
             await stub.push_event(private_event(message_id=701, message=[{"type": "text", "data": {"text": "记住：我喜欢蓝色"}}]))
             action = await stub.wait_for_action("send_private_msg")
@@ -445,11 +486,15 @@ async def test_memory_command_flow_end_to_end(tmp_path):
 
             await stub.push_event(private_event(message_id=703, message=[{"type": "text", "data": {"text": "忘记 #1"}}]))
             action3 = await stub.wait_for_action("send_private_msg", occurrence=3)
-            assert action3["params"]["message"][0]["data"]["text"] == "已忘记 #1。"
+            assert action3["params"]["message"][0]["data"]["text"].startswith("已忘记 #1。")
+            assert "短期对话上下文" in action3["params"]["message"][0]["data"]["text"]
 
             await stub.push_event(private_event(message_id=704, message=[{"type": "text", "data": {"text": "查看记忆"}}]))
             action4 = await stub.wait_for_action("send_private_msg", occurrence=4)
             assert "当前没有记住的内容" in action4["params"]["message"][0]["data"]["text"]
+
+            for mid in (701, 702, 703, 704):
+                await wait_for_status(db, mid, "sent_ok")
 
         # 记忆命令也走消息状态机
         statuses = await db.fetchall(
@@ -457,6 +502,72 @@ async def test_memory_command_flow_end_to_end(tmp_path):
         )
         assert all(s == "sent_ok" for _, s in statuses)
         assert len(statuses) == 4
+    finally:
+        await db.close()
+        await stub.stop()
+
+
+async def test_history_restored_after_runner_restart(tmp_path):
+    """重启 runner（同一数据库）后，已送达对话被恢复进新实例的短期上下文。"""
+    from companion.adapters.deepseek import ChatResult
+    from companion.core.agent import DeepSeekResponder
+    from companion.core.sessions import SessionManager
+    from companion.config.settings import DeepSeekSettings as DeepSeekCfg
+
+    class CapturingClient:
+        def __init__(self):
+            self.requests: list[list[dict]] = []
+
+        async def chat(self, messages):
+            self.requests.append([dict(m) for m in messages])
+            return ChatResult("恢复验证回复", "deepseek-flash", 1, 1, 2)
+
+        async def close(self):
+            pass
+
+    def event(message_id: int, text: str) -> dict:
+        return private_event(message_id=message_id, message=[{"type": "text", "data": {"text": text}}])
+
+    stub = StubOneBot()
+    await stub.start()
+    db = await make_db(tmp_path)
+    settings = make_settings(stub.port)
+    try:
+        # 第一实例：处理一条消息并确认送达
+        sessions1 = SessionManager(max_stored_messages=40)
+        client1 = CapturingClient()
+        responder1 = DeepSeekResponder(client1, DeepSeekCfg(max_history_messages=20), sessions=sessions1)
+        runner1 = BotRunner(settings, responder1, database=db, sessions=sessions1)
+        task1 = asyncio.create_task(runner1.run())
+        await stub.wait_for_action("get_login_info")
+        await wait_workers(runner1)
+        await stub.push_event(event(801, "重启前的问题"))
+        await stub.wait_for_action("send_private_msg")
+        await wait_for_status(db, 801, "sent_ok")  # 确保送达落库后再停止，否则恢复来源缺失
+        task1.cancel()
+        with contextlib.suppress(asyncio.CancelledError, Exception):
+            await task1
+
+        # 第二实例：同库、全新内存，验证历史从持久层恢复
+        sessions2 = SessionManager(max_stored_messages=40)
+        client2 = CapturingClient()
+        responder2 = DeepSeekResponder(client2, DeepSeekCfg(max_history_messages=20), sessions=sessions2)
+        runner2 = BotRunner(settings, responder2, database=db, sessions=sessions2)
+        task2 = asyncio.create_task(runner2.run())
+        await stub.wait_for_action("get_login_info", occurrence=2)
+        await wait_workers(runner2)
+        await stub.push_event(event(802, "重启后的问题"))
+        await stub.wait_for_action("send_private_msg", occurrence=2)
+        task2.cancel()
+        with contextlib.suppress(asyncio.CancelledError, Exception):
+            await task2
+
+        request = client2.requests[0]
+        texts = [m["content"] for m in request]
+        assert [m["role"] for m in request] == ["system", "user", "assistant", "user"]
+        assert texts[1] == "重启前的问题"  # 恢复的历史
+        assert texts[2] == "恢复验证回复"  # 恢复的已送达回复
+        assert texts[3] == "重启后的问题"
     finally:
         await db.close()
         await stub.stop()

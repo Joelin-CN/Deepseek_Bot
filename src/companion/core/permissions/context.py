@@ -22,6 +22,7 @@ class Capability(str, Enum):
     MEMORY_READ = "memory_read"  # 查看本会话记忆
     MEMORY_MANAGE = "memory_manage"  # 增改删本会话记忆
     ADMIN_STATUS = "admin_status"  # 管理命令（M9 使用）
+    WEB_BROWSE = "web_browse"  # 通过 ego-lite 浏览公开网页（M5 起仅主人）
 
 
 ROLE_CAPABILITIES: dict[Role, FrozenSet[Capability]] = {

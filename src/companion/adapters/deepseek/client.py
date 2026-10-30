@@ -1,13 +1,13 @@
 """DeepSeek chat completions HTTP 适配器（OpenAI 兼容格式）。
 
 只负责协议与传输：URL、鉴权头、超时、状态码到错误类别的映射、usage
-解析。上下文组装与重试策略不在这里。
+与 tool_calls 解析。上下文组装、重试与工具执行循环不在这里。
 """
 
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Literal
 
 import httpx
@@ -42,12 +42,23 @@ class DeepSeekError(Exception):
 
 
 @dataclass(frozen=True, slots=True)
+class ToolCallData:
+    """模型响应中的一次工具调用（原始字段，参数保持未解析文本）。"""
+
+    id: str
+    name: str
+    arguments: str
+
+
+@dataclass(frozen=True, slots=True)
 class ChatResult:
     content: str
     model: str
     prompt_tokens: int
     completion_tokens: int
     total_tokens: int
+    finish_reason: str = ""
+    tool_calls: tuple[ToolCallData, ...] = field(default=())
 
 
 class DeepSeekClient:
@@ -68,13 +79,21 @@ class DeepSeekClient:
     async def close(self) -> None:
         await self._http.aclose()
 
-    async def chat(self, messages: list[dict[str, Any]]) -> ChatResult:
+    async def chat(
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        tools: list[dict[str, Any]] | None = None,
+    ) -> ChatResult:
         payload: dict[str, Any] = {
             "model": self._settings.model,
             "messages": messages,
             "max_tokens": self._settings.max_tokens,
             "thinking": {"type": "enabled" if self._settings.enable_thinking else "disabled"},
         }
+        if tools:
+            payload["tools"] = tools
+            payload["tool_choice"] = "auto"
         try:
             response = await self._http.post("/chat/completions", json=payload)
         except httpx.TimeoutException as exc:
@@ -93,13 +112,26 @@ class DeepSeekClient:
 
         try:
             data = response.json()
+            choice = data["choices"][0]
+            message = choice.get("message") or {}
             usage = data.get("usage") or {}
+            tool_calls = tuple(
+                ToolCallData(
+                    id=str(raw.get("id", "")),
+                    name=str((raw.get("function") or {}).get("name", "")),
+                    arguments=str((raw.get("function") or {}).get("arguments", "") or ""),
+                )
+                for raw in (message.get("tool_calls") or [])
+                if isinstance(raw, dict)
+            )
             return ChatResult(
-                content=data["choices"][0]["message"]["content"] or "",
+                content=message.get("content") or "",
                 model=str(data.get("model", self._settings.model)),
                 prompt_tokens=int(usage.get("prompt_tokens", 0)),
                 completion_tokens=int(usage.get("completion_tokens", 0)),
                 total_tokens=int(usage.get("total_tokens", 0)),
+                finish_reason=str(choice.get("finish_reason") or ""),
+                tool_calls=tool_calls,
             )
         except (KeyError, IndexError, TypeError, ValueError) as exc:
             raise DeepSeekError("unknown", f"响应格式异常: {exc}") from exc

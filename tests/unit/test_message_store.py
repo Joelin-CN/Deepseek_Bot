@@ -8,6 +8,9 @@ from companion.persistence import Database
 SELF_ID = 3666167977
 SENDER = 844281600
 
+SELF_ID = 3666167977
+SENDER = 844281600
+
 
 def _message(text="你好", message_id=101):
     return InboundMessage(
@@ -87,5 +90,52 @@ async def test_usage_recorded(tmp_path):
         )
         row = await db.fetchone("SELECT session_key, model, total_tokens FROM usage")
         assert row == ("qq/1/private/2", "deepseek-flash", 58)
+    finally:
+        await db.close()
+
+
+async def test_delivered_turns_exclude_failed_unknown_and_commands(tmp_path):
+    """只有 sent_ok 且双方全文都在的记录构成可恢复的对话轮次。"""
+    from companion.core.sessions.store import MessageStore as Store
+
+    db = await Database.open(tmp_path / "bot.db")
+    store = Store(db)
+    scope = f"qq/{SELF_ID}/private/{SENDER}"
+    try:
+        # 1) 正常送达的一轮
+        ok_row = await store.record_inbound(_message("正常问题", 1))
+        await store.mark_generated(ok_row, "正常回答")
+        await store.mark_delivery(ok_row, "sent_ok", 111)
+        # 2) 回执未知的一轮：不能作为已送达对话
+        unknown_row = await store.record_inbound(_message("未知问题", 2))
+        await store.mark_generated(unknown_row, "未知回答")
+        await store.mark_delivery(unknown_row, "send_unknown")
+        # 3) 命令回执：非对话
+        cmd_row = await store.record_inbound(_message("记住：某事", 3))
+        await store.mark_generated(cmd_row, "已记住（#1）：某事", conversational=False)
+        await store.mark_delivery(cmd_row, "sent_ok", 333)
+        # 4) 发送失败的一轮
+        fail_row = await store.record_inbound(_message("失败问题", 4))
+        await store.mark_generated(fail_row, "失败回答")
+        await store.mark_delivery(fail_row, "send_failed")
+
+        turns = await store.delivered_turns(scope, 10)
+        assert turns == [("正常问题", "正常回答")]
+    finally:
+        await db.close()
+
+
+async def test_full_content_stored_for_recovery(tmp_path):
+    db = await Database.open(tmp_path / "bot.db")
+    store = MessageStore(db)
+    try:
+        long_text = "这是一条很长的完整消息" * 10
+        row_id = await store.record_inbound(_message(long_text, 9))
+        await store.mark_generated(row_id, "完整的回复内容" * 5)
+        row = await db.fetchone(
+            "SELECT content, reply_content FROM messages WHERE id=?", (row_id,)
+        )
+        assert row[0] == long_text  # 全文而非预览
+        assert row[1] == "完整的回复内容" * 5
     finally:
         await db.close()

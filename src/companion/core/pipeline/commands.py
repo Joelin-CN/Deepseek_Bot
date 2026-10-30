@@ -27,8 +27,10 @@ _VIEW_RE = re.compile(r"^查看记忆(?:\s+(\d+))?$")
 
 
 class MemoryCommandRouter:
-    def __init__(self, service: MemoryService):
+    def __init__(self, service: MemoryService, on_change=None):
+        """on_change：忘记/修订成功后回调（SessionKey），用于清空该会话短期上下文。"""
         self._service = service
+        self._on_change = on_change
 
     async def try_handle(self, ctx: RunContext, message: InboundMessage) -> str | None:
         """未命中命令返回 None（继续正常对话路径）。"""
@@ -72,7 +74,11 @@ class MemoryCommandRouter:
 
     async def _forget(self, ctx: RunContext, memory_id: int) -> str:
         ok = await self._service.forget(ctx, memory_id)
-        return f"已忘记 #{memory_id}。" if ok else f"没有找到 #{memory_id} 这条有效记忆。"
+        if not ok:
+            return f"没有找到 #{memory_id} 这条有效记忆。"
+        if self._on_change is not None:
+            self._on_change(ctx.session)
+        return f"已忘记 #{memory_id}。本会话的短期对话上下文已一并清空。"
 
     async def _revise(self, ctx: RunContext, memory_id: int, new_content: str) -> str:
         if not new_content:
@@ -80,7 +86,12 @@ class MemoryCommandRouter:
         record = await self._service.revise(ctx, memory_id, new_content)
         if record is None:
             return f"没有找到 #{memory_id} 这条有效记忆。"
-        return f"已修改 #{memory_id} → #{record.id}：{new_content[:80]}"
+        if self._on_change is not None:
+            self._on_change(ctx.session)
+        return (
+            f"已修改 #{memory_id} → #{record.id}：{new_content[:80]}"
+            "（本会话短期对话上下文已清空）"
+        )
 
     async def _list(self, ctx: RunContext, page: int) -> str:
         records, total = await self._service.list_memories(ctx, page)

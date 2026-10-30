@@ -37,7 +37,7 @@ Python 统一使用 Conda 环境 `Deepseek_bot`，版本基线为 3.12.x。每�
 | `management` | 状态、配置和管理操作接口 | 前端形式尚未确定 |
 | `telemetry` | 日志、错误与用量 | 默认避免记录密钥和完整私人内容 |
 
-已实现（M1–M3）：`core/lifecycle`（runner 与 worker 池）、`core/events`（InboundMessage + SessionKey）、`core/pipeline`（筛选链、记忆命令、固定应答）、`core/agent`（DeepSeek 有界上下文应答）、`core/sessions`（会话管理/去重/消息与用量存储）、`core/permissions`（角色/能力/运行上下文）、`adapters/onebot`、`adapters/deepseek`、`memory`（显式记忆服务）、`persistence`（SQLite + 迁移 v1/v2）。其余目录仍为规划占位。
+已实现（M1–M5）：`core/lifecycle`（runner 与 worker 池 + 单实例保护）、`core/events`（InboundMessage + SessionKey）、`core/pipeline`（筛选链、记忆命令、固定应答）、`core/agent`（DeepSeek 有界上下文应答）、`core/sessions`（会话管理/去重/消息与用量存储）、`core/permissions`（角色/能力/运行上下文）、`core/tools`（注册表 + 统一执行服务：权限/启停复查/参数校验/超时/取消/结果裁剪/名称映射）、`core/tasks.py`（任务状态与取消传导）、`adapters/onebot`、`adapters/deepseek`、`api`（原生插件公共接口，API 版本 1.0）、`plugin_system`（清单校验/加载器/宿主/KV/运行状态）、`memory`（显式记忆服务）、`persistence`（SQLite + 迁移 v1–v4）、内置插件 `plugins/hello`、`plugins/counter`、`plugins/ego_browser`，`adapters/ego`（URL 边界 + ego 桥接）。其余目录仍为规划占位。
 
 ## 规划中的主流程
 
@@ -45,14 +45,15 @@ Python 统一使用 Conda 环境 `Deepseek_bot`，版本基线为 3.12.x。每�
 SnowLuma 事件
   → 转成内部消息
   → 定位会话并检查来源
-  → 插件处理阶段
-  → 上下文准备与记忆检索挂钩
-  → 模型／工具执行循环
+  → 任务控制（/task，会话锁外，M5）
+  → 插件处理阶段（M4 已实现：/plugin 管理 → 消息处理器 → 插件命令）
+  → 上下文准备与记忆检索挂钩（记忆命令 + 记忆注入已实现）
+  → 模型／工具执行循环（M5 已实现：DeepSeek tool_calls 多轮闭环 + 统一执行服务）
   → 输出处理与发送
   → 保存记录与后续挂钩
 ```
 
-这是目标流程，当前尚无执行实现。AstrBot 插件处理顺序、返回值和异步行为需要逐项确认，不能只映射同名函数。
+插件阶段在会话锁内、记忆命令之前执行；未被插件消费的消息继续原链路。AstrBot 插件处理顺序、返回值和异步行为需要逐项确认（M7），不能只映射同名函数。
 
 ## 执行与运行约定
 

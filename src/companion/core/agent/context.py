@@ -25,6 +25,22 @@ def estimate_tokens(text: str) -> int:
     return cjk + (other + 3) // 4
 
 
+def clip_to_token_budget(text: str, budget: int) -> str:
+    """截取前缀使其估算 token 不超过 budget（估算随长度单调，二分定位）。"""
+    if estimate_tokens(text) <= budget:
+        return text
+    if budget <= 0:
+        return ""
+    low, high = 0, len(text)
+    while low < high:
+        mid = (low + high + 1) // 2
+        if estimate_tokens(text[:mid]) <= budget:
+            low = mid
+        else:
+            high = mid - 1
+    return text[:low]
+
+
 def _message_tokens(message: dict) -> int:
     content = message.get("content") or ""
     return estimate_tokens(content) + 4  # 角色/结构开销的粗略常数

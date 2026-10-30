@@ -1,0 +1,15 @@
+{
+  "id": "example.echo",
+  "name": "回显示例插件",
+  "version": "1.0.0",
+  "api_version": "1.0",
+  "entry": "main:EchoPlugin",
+  "description": "最小可运行示例：注册一个 /echo 命令，原样返回参数。",
+  "config": {
+    "prefix": {
+      "type": "string",
+      "default": "echo:",
+      "description": "回复前缀"
+    }
+  }
+}

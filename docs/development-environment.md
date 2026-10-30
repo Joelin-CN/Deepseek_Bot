@@ -78,7 +78,7 @@ python -c "import sys; print(sys.executable)"
 | 运行 | pydantic / pydantic-settings（配置校验、.env） | 2.14.1 / 2.16.1 |
 | dev | pytest / pytest-asyncio | 9.2.0 / 1.4.1 |
 
-测试：`python -m pytest -q`（47 项全部通过；含本地替身 WS 服务集成测试）。升级依赖后先跑全部测试再联调。
+测试：`python -m pytest -q`（331 项全部通过；含替身 WS/模型/浏览器集成测试）。升级依赖后先跑全部测试再联调。
 
 ## 必须遵循的推进顺序
 

@@ -1,0 +1,26 @@
+{
+  "id": "builtin.ego_browser",
+  "name": "网页任务插件",
+  "version": "1.0.0",
+  "api_version": "1.1",
+  "entry": "main:EgoBrowserPlugin",
+  "description": "通过 ego-lite 执行公开网页的搜索、打开与阅读（M5B；仅主人可用）。",
+  "requires": [],
+  "config": {
+    "search_url": {
+      "type": "string",
+      "default": "https://www.bing.com/search?q=",
+      "description": "固定搜索流程使用的搜索引擎地址前缀"
+    },
+    "page_load_timeout": {
+      "type": "float",
+      "default": 45.0,
+      "description": "页面导航等待上限（秒）"
+    },
+    "max_pages_per_task": {
+      "type": "int",
+      "default": 6,
+      "description": "单个任务可打开的页面数上限"
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "id": "builtin.counter",
+  "name": "计数插件",
+  "version": "1.0.0",
+  "api_version": "1.0",
+  "entry": "main:CounterPlugin",
+  "description": "演示插件 KV 持久化（跨重启）、按会话隔离计数与后台任务生命周期（M4 内置示例）。",
+  "config": {
+    "step": {
+      "type": "int",
+      "default": 1,
+      "description": "每次计数增量（>=1）"
+    },
+    "heartbeat_interval": {
+      "type": "float",
+      "default": 60.0,
+      "description": "心跳日志间隔秒数（仅写本地日志，绝不发送 QQ 消息；0 关闭）"
+    }
+  }
+}

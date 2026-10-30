@@ -1,8 +1,12 @@
 # 运行手册
 
-## 当前状态（2026-10-28 M3 更新）
+## 当前状态（2026-10-29 M5 更新）
 
-M1（QQ 私聊固定应答）、M2（DeepSeek 实际应答）与 M3（统一会话内核 + 基础长期记忆）均已实现并通过验收。当前运行于 deepseek 模式：授权发送者用日常 QQ 给机器人发私聊可收到模型回复；显式记忆命令（记住/查看/搜索/修改/忘记）跨重启有效。
+M1（QQ 私聊固定应答）、M2（DeepSeek 实际应答）、M3/M3.1（统一会话内核 + 基础长期记忆及修正轮）、M4（原生插件系统与公共 API）与 M5（统一工具执行循环 + ego-lite 网页任务）均已实现并通过验收。当前运行于 deepseek 模式。
+
+M5 变化：DeepSeek tool_calls 多轮闭环（模型请求工具 → 框架校验权限/参数 → 执行 → 按调用 ID 回传 → 模型继续，直到最终答复或达到限制）；任务控制命令 `/task`（锁外处理，长任务期间可取消）；网页任务插件 `builtin.ego_browser`（`web_search`/`web_open`/`web_finish`，仅主人、仅公开网页，经本机 ego-lite 执行）。
+
+M4 变化：原生插件系统（`companion.api` 公共接口 + 插件宿主），内置 `/hello`、`/counter` 插件与主人管理命令 `/plugin`；插件 KV 与启停状态持久化在 `data/bot.db`；未被插件消费的消息继续走记忆命令与模型应答（原链路不变）。
 
 M3 内核变化：每次重连自动重新验证机器人身份；动作结果三分（成功/明确失败/结果未知不重发）；事件队列与模型并发有上限；消息状态与模型用量落库（`data/bot.db`）。
 
@@ -31,10 +35,20 @@ M3 内核变化：每次重连自动重新验证机器人身份；动作结果�
 ## 数据目录与备份（M3 起）
 
 - 数据库：`data/bot.db`（SQLite 3.54.1，WAL 模式；同目录有 `-wal`/`-shm` 文件）。位置由配置解析：默认仓库 `data/`，`COMPANION_DATA_DIR` 环境变量或 `bot.data_dir` 可覆盖；不依赖启动目录。
-- 迁移：启动时自动按版本应用（当前 v1 messages/usage、v2 memories），重复启动不重复应用。
-- 表：`messages`（消息状态链：received→model_generated→sent_ok/send_failed/send_unknown）、`usage`（逐次模型 token）、`memories`（长期记忆）。
+- 迁移：启动时自动按版本应用（当前 v1 messages/usage、v2 memories、v3 messages 全文列、v4 plugin_kv/plugin_runtime_state），重复启动不重复应用。
+- 表：`messages`（消息状态链：received→model_generated→sent_ok/send_failed/send_unknown/consumed，consumed 为被插件消费且无需回复）、`usage`（逐次模型 token）、`memories`（长期记忆）、`plugin_kv`（插件键值存储）、`plugin_runtime_state`（插件运行时启停状态）。
+- 插件数据目录：`data/plugins/data/<插件ID>/`（各插件独立，含其 KV 之外的任意文件）。
 - 备份：停止机器人后复制整个 `data/` 目录即可；恢复时原样放回（含迁移记录，可直接启动）。`send_unknown` 表示消息可能已送达但回执未知——按“可能已发送”处理，不要据此重发。
 - `data/` 已被 Git 忽略，不入库。
+
+## 对话上下文与记忆行为（M3.1 起）
+
+- **内存中的短期历史有界**（按消息条数，当前为 2×max_history_messages），不只裁剪请求副本。
+- **重启恢复**：messages 表保存入站与已送达回复的全文；新进程首次访问某会话时，从库中恢复最近若干轮**已完整送达**的对话（发送失败、回执未知、命令回执不构成对话历史）。
+- **送达才入史**：只有 `sent_ok` 的回复进入后续对话；回执未知/发送失败/发送前截断的内容不会以“完整已送达回复”出现（历史记录实际送达文本）。
+- **模型输入总预算**（`max_input_tokens`，默认 8000）覆盖系统提示+长期记忆+历史+当前消息；超限时先丢最旧记忆、再裁历史，当前消息独占超限则截断并标注。
+- **忘记/修改记忆**后：该记忆立即从检索与上下文注入消失，同时**清空本会话短期对话上下文**（避免旧问答继续引用已删记忆）；命令回复会说明这一点。
+- 记忆命令、数据目录与备份见下文对应章节。
 
 ## 长期记忆命令（私聊内直接发送）
 
@@ -48,9 +62,81 @@ M3 内核变化：每次重连自动重新验证机器人身份；动作结果�
 
 记忆只作用于当前私聊会话；不同私聊/群之间互不可见。写操作需要 MEMORY_MANAGE 能力（主人/授权成员），身份来自 QQ 号与本地配置，不接受聊天文字声明。
 
+## 插件系统（M4 起）
+
+内置插件命令（需在配置中启用或经管理命令启用）：
+
+| 命令 | 来源 | 作用 |
+| --- | --- | --- |
+| `/hello` | builtin.hello | 打招呼并展示当前会话与身份信息（来自运行上下文） |
+| `/counter` | builtin.counter | 会话计数（KV 持久化，跨重启保留）；`/counter reset` 重置本会话计数 |
+
+插件管理命令（**仅主人**，私聊发送；非主人收到拒绝回复）：
+
+| 命令 | 作用 |
+| --- | --- |
+| `/plugin list` | 列出发现的插件与状态（ENABLED/DISABLED/FAILED 及错误原因） |
+| `/plugin status <插件ID>` | 查看单个插件的注册情况（命令/工具/任务数）与错误 |
+| `/plugin enable <插件ID>` | 启用（必要时先重新加载）并持久化 |
+| `/plugin disable <插件ID>` | 停用（撤销命令/处理器/工具、取消后台任务）并持久化 |
+
+启用状态规则：**数据库运行状态行优先；无行则取 `config/local.json` 的 `plugins.instances.<ID>.enabled`（缺省停用）**。配置文件决定首次启动，之后管理命令的显式操作一直有效；进程正常退出不改写状态。
+
+配置示例（`config/local.json`）：
+
+```json
+"plugins": {
+  "extra_roots": [],
+  "instances": {
+    "builtin.hello": {"enabled": true, "config": {}},
+    "builtin.counter": {"enabled": true, "config": {"heartbeat_interval": 60}}
+  }
+}
+```
+
+counter 的 `heartbeat_interval` 只控制写本地日志的心跳（默认 60 秒，0 关闭），**不会**定时向 QQ 发送消息。
+
+故障排查：插件加载/启用失败不影响的其余插件与正常聊天；`/plugin list` 与 `logs/bot.log`（`companion.plugin.<ID>`）给出具体原因（重复 ID、入口错误、API 版本不兼容、依赖缺失、配置非法等）。修复文件后重启或再次 `/plugin enable` 即重新加载。
+
+## 工具循环与网页任务（M5 起）
+
+### 任务控制命令（仅主人，私聊；在会话锁之外处理，长任务期间可用）
+
+| 命令 | 作用 |
+| --- | --- |
+| `/task list` | 列出任务（状态 RUNNING/COMPLETED/FAILED/CANCELLED/TIMEOUT、耗时、轮次、工具次数、tokens） |
+| `/task status <ID>` | 查看单个任务（支持 ID 前缀） |
+| `/task cancel <ID>` | 取消自己发起的运行中任务（传导到模型循环、工具执行与浏览器清理） |
+
+进入工具循环时会先发一条受理提示（含任务短 ID 与取消命令示例）。取消后不再发起下一轮模型/工具请求，不会发送迟到的成功答复。
+
+### 工具循环配置（`config/local.json` 的 `tools` 段）
+
+| 键 | 默认 | 说明 |
+| --- | --- | --- |
+| `enable` | true | 工具循环总开关（false 时纯聊天直答） |
+| `max_model_rounds` | 5 | 单任务模型请求轮数上限 |
+| `max_tool_calls` | 8 | 单任务工具执行总次数上限 |
+| `tool_timeout` | 60 | 单次工具执行超时（秒） |
+| `task_timeout` | 300 | 单任务总时限（秒） |
+| `max_tool_result_chars` | 6000 | 单个工具结果序列化字符上限（结构保持式裁剪） |
+| `accept_notice` | true | 进入工具循环时发送一次受理提示 |
+
+每轮模型请求都计入 `max_input_tokens` 总预算并逐轮记录用量（usage 表 `source='chat_tools'`）。达到限制时明确告知"任务未完成"，不冒充成功。普通聊天无工具时直答，行为与之前一致。
+
+### 网页任务（builtin.ego_browser 插件，仅主人）
+
+- 能力：`web_search`（Bing 固定搜索流程）→ `web_open`（打开公网页面读正文/链接）→ `web_finish`（结束清理）；模型按需组合。
+- 用法示例：私聊发"搜一下 DeepSeek 最新模型并总结要点（附来源链接）"。
+- 前提：本机 ego-lite 可用（`ego-browser --version` 正常返回；浏览器由 ego-lite 管理）。插件配置（`plugins.instances.builtin.ego_browser.config`）：`search_url`（默认 Bing）、`page_load_timeout`（默认 45s）、`max_pages_per_task`（默认 6）。
+- 并发：网页工具全局同时只执行 1 个；忙时工具立即返回 `browser_busy`，模型会转告用户，不会排队占满处理 worker。
+- 范围与边界：仅公网 HTTP/HTTPS；本机/私网/内部域名/非 HTTP 协议/URL 用户信息一律拒绝；跳转后的实际地址同样过检。DNS 重绑定不在校验范围；TaskSpace 不构成 Profile/登录态/网络隔离；不读取 Cookie、密钥、环境变量；不提供任意 JS/命令/文件工具；页面内容只作为工具数据返回。取消/超时会终止桥接子进程并用独立进程清理任务空间；清理失败时日志如实记录"空间状态未知"。
+- 故障：ego-lite 不可用或页面失败时，工具返回明确错误，模型据此告知用户；普通聊天与记忆命令不受影响。网页内容不自动写入长期记忆。
+- DNS 排查经验（2026-10-30 实例）：网页工具报 `net::ERR_NAME_NOT_RESOLVED` 时先分三层定位——① 代理是否真的在跑（本机 sing-box TUN 网卡 `utun12` 存在但核心进程退出=残留黑洞；`netstat` 查代理端口是否监听）；② 系统 DNS 是否选择性丢包（教育网 DNS 对 bing/google 域名超时、baidu 正常）；③ ego 浏览器链路（用 `adapters/ego` 打开百度验证浏览器健康）。修复代理后 ego 浏览器自动跟随系统代理/TUN，bot 无需改动。
+
 ## 启动前检查
 
-0. 确认没有残留的旧实例（`Get-CimInstance Win32_Process -Filter "name='python.exe'" | Where-Object CommandLine -like '*companion*'`）——两个实例会同时应答同一账号造成重复回复；正式的单实例保护在 M9 实现。
+0. 单实例保护（M3.1 起自动）：启动时获取 `data/companion.lock`（记录 PID 与进程创建时间，防 PID 复用误判）；已有实例运行时新实例拒绝启动（exit code 3 并提示 PID）。异常退出后锁残留属过期锁，下次启动自动覆盖；确有需要也可手动删除该文件。`stop_bot.ps1` 会核验进程身份（Deepseek_bot 环境的 python 运行 companion）后才停止。
 
 1. SnowLuma 运行中：`E:\Softwares\SnowLuma` 下 `node.exe index.mjs`（用自带 node.exe；`launcher.bat` 依赖 PATH 里的 node，本机 24.15.0 低于完整版 engines 要求 24.22.1+）。WebUI：`http://127.0.0.1:5099`。
 2. 机器人 QQ 实例已登录（第二个 QQ 窗口，账号 3666167977），且 SnowLuma 已对其注入（WebUI「进程」页该 PID 状态 online；`hookAutoLoad` 默认 false，QQ 重启后需在 WebUI 手动 Load）。

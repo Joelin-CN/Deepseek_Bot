@@ -10,11 +10,17 @@ from companion.persistence import Database
 async def test_migrations_apply_and_record_version(tmp_path):
     db = await Database.open(tmp_path / "bot.db")
     try:
-        assert await db.version() == 2  # V1 messages/usage + V2 memories
+        assert await db.version() == 4  # v1 messages/usage + v2 memories + v3 全文列 + v4 插件表
         await db.execute(
             "INSERT INTO memories (scope, content, status, created_ts, updated_ts) "
             "VALUES ('s', 'c', 'active', 0, 0)"
         )
+        columns = {row[1] for row in await db.fetchall("PRAGMA table_info(messages)")}
+        assert {"content", "reply_content"} <= columns
+        kv_columns = {row[1] for row in await db.fetchall("PRAGMA table_info(plugin_kv)")}
+        assert {"namespace", "key", "value", "updated_ts"} <= kv_columns
+        state_columns = {row[1] for row in await db.fetchall("PRAGMA table_info(plugin_runtime_state)")}
+        assert {"plugin_id", "enabled", "updated_ts"} <= state_columns
     finally:
         await db.close()
 
@@ -29,7 +35,7 @@ async def test_reopen_does_not_reapply_migrations(tmp_path):
 
     db2 = await Database.open(tmp_path / "bot.db")
     try:
-        assert await db2.version() == 2
+        assert await db2.version() == 4
         row = await db2.fetchone("SELECT content FROM memories WHERE scope='s'")
         assert row[0] == "重启后仍在我还在"
     finally:

@@ -24,6 +24,7 @@
     "model": "deepseek-flash",
     "timeout": 60,
     "max_tokens": 1024,
+    "max_input_tokens": 8000,
     "max_history_messages": 20,
     "max_history_tokens": 2000,
     "max_reply_chars": 3000,
@@ -31,5 +32,22 @@
     "memory_context_items": 8,
     "enable_thinking": false,
     "system_prompt": "你是一个友好的 QQ 私聊机器人助手，用简洁的中文回答。"
+  },
+  "plugins": {
+    "extra_roots": [],
+    "instances": {
+      "builtin.hello": {"enabled": true, "config": {}},
+      "builtin.counter": {"enabled": true, "config": {}},
+      "builtin.ego_browser": {"enabled": false, "config": {}}
+    }
+  },
+  "tools": {
+    "enable": true,
+    "max_model_rounds": 5,
+    "max_tool_calls": 8,
+    "tool_timeout": 60,
+    "task_timeout": 300,
+    "max_tool_result_chars": 6000,
+    "accept_notice": true
   }
 }

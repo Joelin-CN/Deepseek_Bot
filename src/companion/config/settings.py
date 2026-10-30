@@ -11,9 +11,11 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, SecretStr, ValidationError, field_validator
+
+from companion.api.types import valid_plugin_id
 
 DEFAULT_CONFIG_PATH = Path("config") / "local.json"
 EXAMPLE_CONFIG_PATH = Path("config") / "bot.example.json"
@@ -57,6 +59,7 @@ class DeepSeekSettings(BaseModel):
     model: str = "deepseek-flash"
     timeout: float = Field(default=60.0, gt=0)
     max_tokens: int = Field(default=1024, ge=1, le=8192, description="单次回复输出 token 上限")
+    max_input_tokens: int = Field(default=8000, ge=256, description="模型输入总预算：系统提示+记忆+历史+当前消息")
     max_history_messages: int = Field(default=20, ge=0, description="短期上下文消息条数上限，0 表示不带上下文")
     max_history_tokens: int = Field(default=2000, ge=0, description="短期上下文估算 token 上限")
     max_reply_chars: int = Field(default=3000, ge=100, description="发送前回复长度截断保护")
@@ -66,11 +69,62 @@ class DeepSeekSettings(BaseModel):
     system_prompt: str = "你是一个友好的 QQ 私聊机器人助手，用简洁的中文回答。"
 
 
+class PluginInstanceSettings(BaseModel):
+    """单个插件的配置段（plugins.instances.<插件ID>）。
+
+    enabled 只决定**首次启动**（无运行状态行时）是否启用；显式
+    /plugin enable|disable 写入数据库的运行状态行优先于本配置。
+    """
+
+    enabled: bool = Field(default=False)
+    config: dict[str, Any] = Field(default_factory=dict, description="覆盖清单缺省值的配置项；键与类型在启用时按清单校验")
+
+    @field_validator("config")
+    @classmethod
+    def _check_config_keys(cls, value: dict[str, Any]) -> dict[str, Any]:
+        for key in value:
+            if not isinstance(key, str) or not key or len(key) > 64:
+                raise ValueError(f"配置键非法：{key!r}（非空字符串，≤64 字符）")
+        return value
+
+
+class PluginsSettings(BaseModel):
+    """插件系统配置（plugins 段）。"""
+
+    extra_roots: list[str] = Field(default_factory=list, description="外部插件目录列表；相对路径按仓库根解析。与内置 plugins/ 同等信任级别")
+    instances: dict[str, PluginInstanceSettings] = Field(default_factory=dict, description="按插件 ID 索引的启用状态与配置")
+
+    @field_validator("instances")
+    @classmethod
+    def _check_instance_ids(cls, value: dict[str, PluginInstanceSettings]) -> dict[str, PluginInstanceSettings]:
+        for plugin_id in value:
+            if not valid_plugin_id(plugin_id):
+                raise ValueError(
+                    f"插件 ID 非法：{plugin_id!r}（小写段式标识，如 builtin.hello）"
+                )
+        return value
+
+
+class ToolSettings(BaseModel):
+    """M5 统一工具执行循环的限制。"""
+
+    enable: bool = Field(default=True, description="是否启用模型工具调用循环；False 时纯聊天直答")
+    max_model_rounds: int = Field(default=5, ge=1, le=20, description="单个任务的模型请求轮数上限")
+    max_tool_calls: int = Field(default=8, ge=1, le=32, description="单个任务的工具执行总次数上限")
+    tool_timeout: float = Field(default=60.0, ge=5, le=300, description="单次工具执行超时（秒）")
+    task_timeout: float = Field(default=300.0, ge=10, le=1800, description="单任务总时限（秒）")
+    max_tool_result_chars: int = Field(default=6000, ge=200, le=20000, description="单个工具结果序列化字符上限")
+    accept_notice: bool = Field(default=True, description="进入工具循环时是否发送一次受理提示（含任务 ID）")
+
+
 class Settings(BaseModel):
     onebot: OneBotSettings
     bot: BotSettings
     deepseek: DeepSeekSettings = DeepSeekSettings()
+    tools: ToolSettings = ToolSettings()
+    plugins: PluginsSettings = PluginsSettings()
     data_dir_resolved: Path | None = None  # load_settings 填充；相对路径基于配置文件位置解析
+    plugin_roots_resolved: list[Path] = Field(default_factory=list)  # load_settings 填充：内置 plugins/ 在前，extra_roots 在后
 
 
 def load_settings(path: Path | None = None) -> Settings:
@@ -106,4 +160,12 @@ def load_settings(path: Path | None = None) -> Settings:
     else:
         data_path = config_path.parent.parent / "data"
     settings.data_dir_resolved = data_path.resolve()
+    repo_root = config_path.parent.parent
+    plugin_roots: list[Path] = [(repo_root / "plugins").resolve()]
+    for raw_root in settings.plugins.extra_roots:
+        root_path = Path(raw_root).expanduser()
+        if not root_path.is_absolute():
+            root_path = repo_root / root_path
+        plugin_roots.append(root_path.resolve())
+    settings.plugin_roots_resolved = plugin_roots
     return settings

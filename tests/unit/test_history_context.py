@@ -1,6 +1,6 @@
-"""token 估算与短期上下文裁剪。"""
+"""token 估算、短期上下文裁剪与按预算截断。"""
 
-from companion.core.agent.context import estimate_tokens, trim_history
+from companion.core.agent.context import clip_to_token_budget, estimate_tokens, trim_history
 
 
 def test_cjk_counts_about_one_token_per_char():
@@ -57,3 +57,19 @@ def test_trim_keeps_user_first_pairing():
 
 def test_trim_with_zero_history_config_returns_empty():
     assert trim_history([{"role": "user", "content": "x"}], max_messages=0, max_tokens=0) == []
+
+
+def test_clip_to_token_budget_short_text_untouched():
+    assert clip_to_token_budget("短文本", 100) == "短文本"
+
+
+def test_clip_to_token_budget_respects_budget():
+    text = "长" * 1000
+    clipped = clip_to_token_budget(text, 50)
+    assert len(clipped) < 1000
+    assert estimate_tokens(clipped) <= 50
+    assert clipped == text[: len(clipped)]  # 是前缀截断
+
+
+def test_clip_zero_budget_returns_empty():
+    assert clip_to_token_budget("任何文本", 0) == ""

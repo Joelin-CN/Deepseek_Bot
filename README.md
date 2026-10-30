@@ -4,9 +4,9 @@
 
 ## 当前阶段
 
-M1（QQ 私聊固定应答）、M2（DeepSeek 实际应答）与 M3（统一会话内核 + 基础长期记忆）已实现并验收。当前运行于 deepseek 模式：授权发送者私聊可获得模型回复，并可使用显式记忆命令（记住/查看/搜索/修改/忘记），记忆跨重启有效且按会话隔离。消息状态、模型用量与长期记忆持久化在 `data/bot.db`（SQLite）。启动、停止、备份与故障处理见 [运行手册](docs/runbook.md)。
+M1（QQ 私聊固定应答）、M2（DeepSeek 实际应答）、M3/M3.1（统一会话内核 + 基础长期记忆及修正轮）、M4（原生插件系统与公共 API）与 M5（统一工具执行循环 + ego-lite 网页任务）已实现并验收。当前运行于 deepseek 模式：授权发送者私聊可获得模型回复，并可使用显式记忆命令（记住/查看/搜索/修改/忘记），记忆跨重启有效且按会话隔离。M4 起提供原生插件系统（`companion.api` + 插件宿主）：内置 `/hello`、`/counter` 插件与主人管理命令 `/plugin`。M5 起提供统一工具执行循环（DeepSeek tool_calls 多轮闭环、权限/参数校验、超时与取消）、任务控制命令 `/task`，以及经 ego-lite 的公开网页工具（`web_search`/`web_open`/`web_finish`，仅主人）；插件 KV 与运行状态跨重启持久。消息状态、模型用量、长期记忆与插件数据持久化在 `data/bot.db`（SQLite）。启动、停止、备份与故障处理见 [运行手册](docs/runbook.md)，插件接口见[插件系统与原生 API](docs/plugin-api.md)。
 
-尚未开始：插件系统（M4）、统一工具循环与 ego-lite 浏览器（M5）、群聊应答（M6）、AstrBot 兼容层（M7）、自主活动（M8）、长期运行管理（M9）。
+尚未开始：群聊应答（M6）、AstrBot 兼容层（M7）、自主活动（M8）、长期运行管理（M9）。
 
 源码包名暂用 `companion`，与规划阶段保持一致；产品命名与最终发布包名可以后续确定。
 
@@ -37,29 +37,31 @@ powershell -ExecutionPolicy Bypass -File scripts\windows\start_bot.ps1 -Foregrou
 ```text
 src/
   companion/
-    api/                    原生插件使用的公共接口
+    api/                    原生插件使用的公共接口（已实现：Plugin/PluginContext/HandlerResult，API 版本 1.0）
     core/
-      lifecycle/            启动、停止、资源清理（已实现：runner + worker 池）
+      lifecycle/            启动、停止、资源清理（已实现：runner + worker 池 + 单实例保护）
       events/               内部事件与消息格式（已实现：InboundMessage）
       pipeline/             消息处理阶段及挂钩（已实现：筛选链、记忆命令、固定应答、Responder 协议）
       agent/                模型与工具执行循环（已实现：DeepSeek 有界上下文应答）
       sessions/             会话、上下文、并发控制（已实现：SessionKey、去重、锁、消息/用量存储）
-      tools/                工具登记与执行入口
+      tools/                工具登记与统一执行服务（已实现：登记/权限/校验/超时/取消/裁剪）
       permissions/          身份、能力与范围检查（已实现：角色/能力/运行上下文）
     adapters/
+      ego/                  ego-lite 浏览器接入（已实现：URL 边界 + 固定脚本桥接 + TaskSpace 生命周期）
       onebot/               SnowLuma 接入（已实现：正向 WS 客户端、重连重验证、动作结果三分）
       deepseek/             模型接入（已实现：chat completions 适配器）
       ego/                  ego-lite 接入
-    plugin_system/          插件加载、配置与生命周期
+    plugin_system/          插件加载、配置与生命周期（已实现：清单校验、加载器、宿主、KV、运行状态）
     compat/astrbot/         AstrBot 插件接口与行为转换
     memory/                 记忆服务、范围与检索（已实现：显式记忆、范围隔离、修订链）
-    persistence/            数据库、存储实现与迁移（已实现：SQLite + 迁移 v1/v2）
+    persistence/            数据库、存储实现与迁移（已实现：SQLite + 迁移 v1–v4）
+    core/tasks.py            任务状态与取消（M5：RUNNING/COMPLETED/FAILED/CANCELLED/TIMEOUT）
     management/             管理接口
-    config/                 配置加载与校验（已实现：settings + 数据目录解析）
+    config/                 配置加载与校验（已实现：settings + 数据目录解析 + plugins 段）
     telemetry/              日志、错误与用量
   astrbot/                  限定范围的兼容导入入口
-plugins/                    随项目维护的内置插件
-examples/plugins/           后续插件示例
+plugins/                    随项目维护的内置插件（已实现：hello、counter、ego_browser；memory_tools 为占位）
+examples/plugins/           插件开发示例（已实现：echo 最小示例）
 config/                     默认配置与示例的位置
 scripts/windows/            本机运行辅助脚本（start_bot.ps1 / stop_bot.ps1）
 ops/                        外部组件与运行维护约定

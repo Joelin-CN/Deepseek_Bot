@@ -1,0 +1,15 @@
+{
+  "id": "builtin.hello",
+  "name": "问候插件",
+  "version": "1.0.0",
+  "api_version": "1.0",
+  "entry": "main:HelloPlugin",
+  "description": "演示命令注册、运行上下文信息读取与工具描述登记（M4 内置示例）。",
+  "config": {
+    "greeting": {
+      "type": "string",
+      "default": "你好",
+      "description": "问候语前缀"
+    }
+  }
+}
